@@ -1,0 +1,22 @@
+server:
+  port: 8081
+  ssl:
+    enabled: true
+    key-store: /etc/portfolio/keystore.p12
+    key-store-password: changeit
+    key-store-type: PKCS12
+    key-alias: castle
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/portfolio_db?currentSchema=portfolio
+    username: portfolio_user
+    password: welcome
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+kite:
+  api-key: kkesp07wdr31l5z9
+  api-secret: re389qj42lsai642ebt8fugqjptlegmc
+  redirect-url: https://castle.local:8081/auth/kite/callback
