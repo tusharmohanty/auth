@@ -114,4 +114,16 @@ public class KiteAuthController {
         if (accept == null) return false;
         return accept.contains("text/html") || accept.contains("application/xhtml+xml");
     }
+
+    @GetMapping("/status")
+    public ResponseEntity<Boolean> status() {
+        var latestOpt = tokenService.findLatest();
+        if (latestOpt.isPresent()) {
+            String token = latestOpt.get().getAccessToken();
+            if (kiteAuthService.isTokenValid(token)) {
+                return ResponseEntity.ok(true);
+            }
+        }
+        return ResponseEntity.ok(false);
+    }
 }
