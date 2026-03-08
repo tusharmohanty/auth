@@ -1,71 +1,55 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CASTLE_HOST="castle.local"
+CASTLE_HOST="castle"
 CASTLE_USER="tushar"
 CASTLE_SSH="${CASTLE_USER}@${CASTLE_HOST}"
 
 APP_NAME="portfolio-auth"
-REMOTE_DIR="/opt/castle"
-REMOTE_JAR="${REMOTE_DIR}/${APP_NAME}.jar"
-LOG_FILE="${REMOTE_DIR}/${APP_NAME}.log"
-PID_FILE="${REMOTE_DIR}/${APP_NAME}.pid"
+REMOTE_DIR="/home/tushar/portfolio-auth"
+REMOTE_JAR="${REMOTE_DIR}/target/portfolio-auth.jar"
+REMOTE_LOG_FILE="/home/tushar/logs/portfolio-auth.log"
 
-SPRING_PROFILE="castle"
-PORT="18080"
-
-JAVA_BIN="/opt/homebrew/opt/openjdk@21/bin/java"
+JAVA_BIN="/usr/bin/java"
+SYSTEMD_SERVICE="portfolio-auth"
 
 echo "==> Building locally (${APP_NAME})..."
 ./mvnw -q -DskipTests clean package
 
 JAR_PATH="$(ls -1 target/*.jar | head -n 1)"
 if [[ -z "${JAR_PATH}" ]]; then
-  echo "ERROR: No jar found in target/*.jar"
+  echo "ERROR: Could not find built jar under target/"
   exit 1
 fi
 
-echo "==> Ensuring remote dir exists: ${REMOTE_DIR}"
-ssh "${CASTLE_SSH}" "bash -lc 'mkdir -p \"${REMOTE_DIR}\"'"
+echo "==> Built jar: ${JAR_PATH}"
 
-echo "==> Uploading jar to castle: ${REMOTE_JAR}"
+echo "==> Copying jar to ${CASTLE_HOST}:${REMOTE_JAR} ..."
 scp "${JAR_PATH}" "${CASTLE_SSH}:${REMOTE_JAR}"
 
-echo "==> Stopping any process on port ${PORT}..."
-ssh "${CASTLE_SSH}" "bash -lc '
-  PID=\$(lsof -ti :${PORT} || true)
-  if [[ -n \"\$PID\" ]]; then
-    echo \"Killing process on ${PORT} (PID=\$PID)\"
-    kill -9 \$PID
-  else
-    echo \"Port ${PORT} is free.\"
-  fi
-'"
-
-echo "==> Starting ${APP_NAME} (profile=${SPRING_PROFILE}) on port ${PORT}..."
-ssh "${CASTLE_SSH}" "bash -lc '
+echo "==> Restarting systemd service ${SYSTEMD_SERVICE} on ${CASTLE_HOST}..."
+ssh "${CASTLE_SSH}" "
   set -e
-  cd \"${REMOTE_DIR}\"
-
-  if [[ ! -x \"${JAVA_BIN}\" ]]; then
-    echo \"ERROR: Java not found at ${JAVA_BIN}\"
+  if [[ ! -x '${JAVA_BIN}' ]]; then
+    echo 'ERROR: Java not found at ${JAVA_BIN}'
     exit 1
   fi
 
-  echo \"Using JAVA_BIN=${JAVA_BIN}\"
-  \"${JAVA_BIN}\" -version
+  if [[ ! -f '${REMOTE_JAR}' ]]; then
+    echo 'ERROR: Deployed jar not found at ${REMOTE_JAR}'
+    exit 1
+  fi
 
-  nohup \"${JAVA_BIN}\" \
-    -jar \"${APP_NAME}.jar\" \
-    --server.port=${PORT} \
-    --server.ssl.enabled=false \
-    --spring.profiles.active=\"${SPRING_PROFILE}\" \
-    > \"${LOG_FILE}\" 2>&1 &
-
-  echo \$! > \"${PID_FILE}\"
-  echo \"Started ${APP_NAME} with PID \$(cat ${PID_FILE})\"
-'"
+  sudo -n systemctl restart '${SYSTEMD_SERVICE}'
+  sleep 3
+  sudo -n systemctl is-active --quiet '${SYSTEMD_SERVICE}'
+"
 
 echo "==> Deployment complete."
-echo "Tail logs with:"
-echo "  ssh ${CASTLE_SSH} \"tail -f ${LOG_FILE}\""
+echo
+echo "Useful commands:"
+echo "  ssh ${CASTLE_SSH} \"sudo -n systemctl status ${SYSTEMD_SERVICE} --no-pager -l\""
+echo "  ssh ${CASTLE_SSH} \"sudo -n journalctl -u ${SYSTEMD_SERVICE} -f\""
+echo "  ssh ${CASTLE_SSH} \"tail -f ${REMOTE_LOG_FILE}\""
+echo "  ssh ${CASTLE_SSH} \"ss -ltnp | grep 18080 || true\""
+echo "  curl -k https://castle.local/auth/kite/login?returnTo=%2Fholdings"
