@@ -1,0 +1,6 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5432/portfolio_db?currentSchema=portfolio
+
+kite:
+  redirect-url: https://dev.local/auth/kite/callback
